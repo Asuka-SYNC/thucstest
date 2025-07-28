@@ -11,7 +11,7 @@ from utils.websocket import manager
 from utils.tasks import heartbeat_checker, match_checker, confirm_timeout_checker
 
 # 导入路由
-from routers import auth, matching, admin, game
+from routers import auth, matching, admin, game, events_callback, matchzy
 
 app = FastAPI(title="Steam Login API")
 
@@ -29,6 +29,8 @@ app.include_router(auth.router)
 app.include_router(matching.router)
 app.include_router(admin.router)
 app.include_router(game.router)
+app.include_router(matchzy.router)
+app.include_router(events_callback.router)
 
 
 # 启动后台任务
