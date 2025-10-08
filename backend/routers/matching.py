@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, update
 from pydantic import BaseModel
 
 from models import User, MatchingUser, MatchSession, get_db
@@ -129,7 +129,8 @@ async def confirm_match(
         current_user: User = Depends(get_current_user),
         db: Session = Depends(get_db)
 ):
-    """确认匹配"""
+    """确认匹配 - 使用原子操作避免并发问题"""
+    # 首先验证用户是否有有效的匹配确认
     matching_user = db.query(MatchingUser).filter(
         and_(
             MatchingUser.user_id == current_user.id,
@@ -141,6 +142,7 @@ async def confirm_match(
     if not matching_user:
         raise HTTPException(status_code=400, detail="无效的匹配确认")
 
+    # 验证匹配会话是否存在且状态正确
     match_session = db.query(MatchSession).filter(
         MatchSession.session_id == confirm_data.session_id
     ).first()
@@ -149,57 +151,92 @@ async def confirm_match(
         raise HTTPException(status_code=400, detail="匹配会话已失效")
 
     if confirm_data.accept:
-        # 接受匹配
-        matching_user.status = "confirmed"
-        match_session.confirmed_count += 1
-
-        # 检查是否所有人都确认了
-        if match_session.confirmed_count >= match_session.required_confirmations:
-            from models import GameSession
-            import uuid
-
-            # 创建游戏会话
-            game_session_id = str(uuid.uuid4())
-            game_session = GameSession(
-                session_id=game_session_id,
-                player_ids=match_session.player_ids,
-                status="preparing"
+        # 接受匹配 - 使用原子操作更新确认计数
+        try:
+            # 原子性地增加确认计数并获取更新后的值
+            result = db.execute(
+                update(MatchSession)
+                .where(and_(
+                    MatchSession.session_id == confirm_data.session_id,
+                    MatchSession.status == "confirming"
+                ))
+                .values(confirmed_count=MatchSession.confirmed_count + 1)
+                .returning(MatchSession.confirmed_count, MatchSession.required_confirmations)
             )
-            db.add(game_session)
+            
+            row = result.fetchone()
+            if not row:
+                raise HTTPException(status_code=400, detail="匹配会话状态已改变")
+            
+            new_confirmed_count, required_confirmations = row
+            
+            # 更新用户状态
+            matching_user.status = "confirmed"
+            
+            # 检查是否所有人都确认了
+            if new_confirmed_count >= required_confirmations:
+                from models import GameSession
+                import uuid
 
-            # 更新匹配会话状态
-            match_session.status = "ready"
-            match_session.started_at = datetime.utcnow()
+                # 创建游戏会话
+                game_session_id = str(uuid.uuid4())
+                game_session = GameSession(
+                    session_id=game_session_id,
+                    player_ids=match_session.player_ids,
+                    status="preparing"
+                )
+                db.add(game_session)
 
-            # 移除匹配用户
-            db.query(MatchingUser).filter(
-                MatchingUser.match_session_id == confirm_data.session_id
-            ).delete()
+                # 更新匹配会话状态
+                match_session.status = "ready"
+                match_session.started_at = datetime.utcnow()
 
-            db.commit()
+                # 移除匹配用户
+                db.query(MatchingUser).filter(
+                    MatchingUser.match_session_id == confirm_data.session_id
+                ).delete()
 
-            return {"message": "匹配成功，正在进入游戏", "game_session_id": game_session_id}
-        else:
-            db.commit()
-            return {"message": "确认成功，等待其他玩家", "confirmed": match_session.confirmed_count}
+                db.commit()
+
+                return {"message": "匹配成功，正在进入游戏", "game_session_id": game_session_id}
+            else:
+                db.commit()
+                return {"message": "确认成功，等待其他玩家", "confirmed": new_confirmed_count}
+                
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail="确认匹配时发生错误")
     else:
-        # 拒绝匹配
-        db.delete(matching_user)
+        # 拒绝匹配 - 使用悲观锁确保一致性
+        try:
+            # 使用悲观锁锁定匹配会话
+            match_session_locked = db.query(MatchSession).filter(
+                MatchSession.session_id == confirm_data.session_id
+            ).with_for_update().first()
+            
+            if not match_session_locked or match_session_locked.status != "confirming":
+                raise HTTPException(status_code=400, detail="匹配会话已失效")
 
-        # 取消匹配会话
-        match_session.status = "cancelled"
-        match_session.cancelled_at = datetime.utcnow()
+            # 删除当前用户的匹配记录
+            db.delete(matching_user)
 
-        # 将其他已确认的用户重新放回等待队列
-        other_users = db.query(MatchingUser).filter(
-            MatchingUser.match_session_id == confirm_data.session_id
-        ).all()
+            # 取消匹配会话
+            match_session_locked.status = "cancelled"
+            match_session_locked.cancelled_at = datetime.utcnow()
 
-        for user in other_users:
-            user.status = "waiting"
-            user.match_session_id = None
-            user.confirm_timeout = None
+            # 将其他已确认的用户重新放回等待队列
+            other_users = db.query(MatchingUser).filter(
+                MatchingUser.match_session_id == confirm_data.session_id
+            ).all()
 
-        db.commit()
+            for user in other_users:
+                user.status = "waiting"
+                user.match_session_id = None
+                user.confirm_timeout = None
 
-        return {"message": "已拒绝匹配"}
+            db.commit()
+            return {"message": "已拒绝匹配"}
+            
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail="拒绝匹配时发生错误")

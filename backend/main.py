@@ -3,6 +3,9 @@ import asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
 
 from models import User, MatchingUser, get_db
 from auth import get_current_user
@@ -31,6 +34,18 @@ app.include_router(admin.router)
 app.include_router(game.router)
 app.include_router(matchzy.router)
 app.include_router(events_callback.router)
+
+# Serve frontend static files
+app.mount("/", StaticFiles(directory="./frontend_dist", html=True), name="static")
+
+
+# SPA fallback: serve index.html for unknown routes
+@app.get("/{full_path:path}")
+async def spa_fallback(full_path: str):
+    index_path = os.path.join(os.path.dirname(__file__), "./frontend_dist/index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"error": "index.html not found"}
 
 
 # 启动后台任务

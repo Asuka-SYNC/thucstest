@@ -32,8 +32,10 @@ export const useAuthStore = defineStore('auth', () => {
   function loadToken() {
     if (token.value) {
       apiClient.defaults.headers.common['Authorization'] = `Bearer ${token.value}`
-      fetchProfile()
+      // Return promise so callers can await
+      return fetchProfile()
     }
+    return Promise.resolve()
   }
 
   async function fetchProfile() {
