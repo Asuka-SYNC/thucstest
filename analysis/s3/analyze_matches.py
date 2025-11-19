@@ -120,7 +120,7 @@ for match in matches:
 
     # 处理players
     for camp, players in [('T', match.get('Tplayers', {})), ('CT', match.get('CTplayers', {}))]:
-        team_name = t_team if camp == 'T' else ct_team
+        team_name = name_mapping[t_team if camp == 'T' else ct_team]
         for uid, stats in players.items():
             player_team_stats[uid][team_name].append(stats)
 
@@ -142,11 +142,13 @@ for uid, teams in player_team_stats.items():
     nickname = player_nicknames.get(uid, 'Unknown')
     for team_name, games in teams.items():
         num_games = len(games)
-        avg_rating = sum(float(g['rating']) for g in games) / num_games
+        avg_rating = sum(float(g['pw_rating']) for g in games) / num_games
         # 其他统计，比如平均kill, death等
         avg_kill = sum(int(g['kill']) for g in games) / num_games
         avg_death = sum(int(g['death']) for g in games) / num_games
         avg_assist = sum(int(g['assist']) for g in games) / num_games
+        avg_adr = sum(int(g['adpr']) for g in games) / num_games
+        
         # 可以添加更多
         player_rows.append({
             'user_id': uid,
@@ -156,7 +158,8 @@ for uid, teams in player_team_stats.items():
             'avg_rating': round(avg_rating, 2),
             'avg_kill': round(avg_kill, 2),
             'avg_death': round(avg_death, 2),
-            'avg_assist': round(avg_assist, 2)
+            'avg_assist': round(avg_assist, 2),
+            'avg_adr': round(avg_adr, 2)
         })
 
 # 写入players.csv
