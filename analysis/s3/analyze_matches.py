@@ -87,6 +87,10 @@ name_mapping = {
     'Nyloo': 'NYLOO',
 }
 
+player_mapping = {
+    '76561199507140552': '76561198981634081'
+}
+
 for match in matches:
     base = match['baseInfo']
     t_team = match['t_team_info']['name']
@@ -122,6 +126,8 @@ for match in matches:
     for camp, players in [('T', match.get('Tplayers', {})), ('CT', match.get('CTplayers', {}))]:
         team_name = name_mapping[t_team if camp == 'T' else ct_team]
         for uid, stats in players.items():
+            if uid in player_mapping:
+                uid = player_mapping[uid]
             player_team_stats[uid][team_name].append(stats)
 
 # 处理弃权情况
@@ -149,22 +155,52 @@ for uid, teams in player_team_stats.items():
         avg_assist = sum(int(g['assist']) for g in games) / num_games
         avg_adr = sum(int(g['adpr']) for g in games) / num_games
         
+        # 新增场均统计
+        avg_rws = sum(float(g['rws']) for g in games) / num_games
+        avg_first_kill = sum(int(g['first_kill']) for g in games) / num_games
+        avg_trade_count = sum(int(g['trade_count']) for g in games) / num_games
+        avg_first_death = sum(int(g['first_death']) for g in games) / num_games
+        avg_trade_frag_count = sum(int(g['trade_frag_count']) for g in games) / num_games
+        avg_is_mvp = sum(int(g['is_mvp']) for g in games)
+        avg_mvp_count = sum(int(g['mvp_count']) for g in games) / num_games
+        avg_1v1 = sum(int(g['1v1']) for g in games) / num_games
+        avg_1v2 = sum(int(g['1v2']) for g in games) / num_games
+        avg_1v3 = sum(int(g['1v3']) for g in games) / num_games
+        avg_1v4 = sum(int(g['1v4']) for g in games) / num_games
+        avg_1v5 = sum(int(g['1v5']) for g in games) / num_games
+        avg_1vn = (avg_1v1 + avg_1v2 + avg_1v3 + avg_1v4 + avg_1v5)
+        avg_awp_kill_num = sum(int(g['awp_kill_num']) for g in games) / num_games
+
         # 可以添加更多
         player_rows.append({
-            'user_id': uid,
-            'nickname': nickname,
-            'team_name': name_mapping[team_name],
-            'games': num_games,
-            'avg_rating': round(avg_rating, 2),
-            'avg_kill': round(avg_kill, 2),
-            'avg_death': round(avg_death, 2),
-            'avg_assist': round(avg_assist, 2),
-            'avg_adr': round(avg_adr, 2)
+            '用户ID': uid,
+            '昵称': nickname,
+            '队伍名称': team_name,
+            '场次': num_games,
+            '平均Rating': round(avg_rating, 2),
+            '平均击杀': round(avg_kill, 2),
+            '平均死亡': round(avg_death, 2),
+            '平均助攻': round(avg_assist, 2),
+            '平均伤害': round(avg_adr, 2),
+            '平均RWS': round(avg_rws, 2),
+            '平均首杀': round(avg_first_kill, 2),
+            '平均换命次数': round(avg_trade_count, 2),
+            '平均首死': round(avg_first_death, 2),
+            '平均换命击杀数': round(avg_trade_frag_count, 2),
+            '总MVP次数': round(avg_is_mvp, 2),
+            '平均MVP计数': round(avg_mvp_count, 2),
+            '平均1v1': round(avg_1v1, 2),
+            '平均1v2': round(avg_1v2, 2),
+            '平均1v3': round(avg_1v3, 2),
+            '平均1v4': round(avg_1v4, 2),
+            '平均1v5': round(avg_1v5, 2),
+            '平均残局数': round(avg_1vn, 2),
+            '平均AWP击杀数': round(avg_awp_kill_num, 2)
         })
 
 # 写入players.csv
 with open('/home/lemon/PycharmProjects/thucs2pl/analysis/s3/players.csv', 'w', newline='', encoding='utf-8') as f:
-    writer = csv.DictWriter(f, fieldnames=['user_id', 'nickname', 'team_name', 'games', 'avg_rating', 'avg_kill', 'avg_death', 'avg_assist'])
+    writer = csv.DictWriter(f, fieldnames=['用户ID', '昵称', '队伍名称', '场次', '平均Rating', '平均击杀', '平均死亡', '平均助攻', '平均伤害', '平均RWS', '平均首杀', '平均换命次数', '平均首死', '平均换命击杀数', '总MVP次数', '平均MVP计数', '平均1v1', '平均1v2', '平均1v3', '平均1v4', '平均1v5', '平均残局数', '平均AWP击杀数'])
     writer.writeheader()
     writer.writerows(player_rows)
 
