@@ -75,10 +75,13 @@ for uid, games in player_stats.items():
     avg_1vn = (avg_1v1 + avg_1v2 + avg_1v3 + avg_1v4 + avg_1v5)
     avg_awp_kill_num = sum(int(g['awp_kill_num']) for g in games) / num_games
 
+    score = 1000 - 7 * num_games + 20 * win_games + 5 * mvp_counts
+
     # 可以添加更多
     player_rows.append({
         '用户ID': uid,
         '昵称': nickname,
+        '积分': score,
         '场次': num_games,
         '胜场': win_games,
         'mvp场次': mvp_counts,
@@ -104,7 +107,7 @@ for uid, games in player_stats.items():
 
 # 写入players.csv
 with open('players.csv', 'w', newline='', encoding='utf-8') as f:
-    writer = csv.DictWriter(f, fieldnames=['用户ID', '昵称', '场次', '胜场', 'mvp场次', '平均Rating', '平均击杀', '平均死亡',
+    writer = csv.DictWriter(f, fieldnames=['用户ID', '昵称', '积分', '场次', '胜场', 'mvp场次', '平均Rating', '平均击杀', '平均死亡',
                                            '平均助攻', '平均伤害', '平均RWS', '平均首杀', '平均换命次数', '平均首死',
                                            '平均换命击杀数', '平均MVP计数', '平均1v1', '平均1v2',
                                            '平均1v3', '平均1v4', '平均1v5', '平均残局数', '平均AWP击杀数'])
