@@ -130,6 +130,55 @@ def gather_processed_ids(results: List[Any]) -> List[str]:
     return seen
 
 
+def run_crawler(ids: List[str], output_file: str, delay: float = 1.0) -> Tuple[List[Any], bool]:
+    """
+    Crawls match data for the given IDs.
+
+    :param ids: List of match IDs to crawl.
+    :param output_file: Path to the output JSON file.
+    :param delay: Delay between requests.
+    :return: A tuple containing the results and a boolean indicating if there were errors.
+    """
+    print(f"Found {len(ids)} ids. Delay: {delay}s")
+
+    existing = load_existing_results(output_file)
+    results = list(existing)
+    processed = set(gather_processed_ids(existing))
+    has_errors = False
+
+    print(f"Resuming with {len(processed)} already-processed ids")
+
+    for idx, id_ in enumerate(ids, start=1):
+        if id_ in processed:
+            print(f"[{idx}/{len(ids)}] Skipping already processed id={id_}")
+            continue
+        print(f"[{idx}/{len(ids)}] Processing id={id_}")
+        try:
+            data = fetch_json_for_id(id_)
+        except Exception as e:
+            print(f"  Error fetching id={id_}: {e}", file=sys.stderr)
+            results.append({"match_id": id_, "error": str(e)})
+            has_errors = True
+        else:
+            if isinstance(data, dict) and "match_id" not in data:
+                data.setdefault("match_id", id_)
+            results.append(data)
+
+        try:
+            save_results(results, output_file)
+        except Exception as e:
+            print(f"  Failed to write progress to {output_file}: {e}", file=sys.stderr)
+
+        processed.add(id_)
+
+        if idx < len(ids):
+            print(f"  Sleeping {delay}s...")
+            time.sleep(delay)
+
+    print(f"Saved {len(results)} items to {output_file}")
+    return results, has_errors
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Crawler for match JSONs")
     parser.add_argument("--delay", type=float, default=1.0, help="seconds to wait between requests (default 5)")
@@ -150,44 +199,13 @@ def main(argv=None):
         print(f"Wrote empty JSON array to {args.output}")
         return
 
-    print(f"Found {len(ids)} ids. Dry run: {args.dry_run}. Delay: {args.delay}s")
+    if args.dry_run:
+        print(f"Found {len(ids)} ids. Dry run: {args.dry_run}. Delay: {args.delay}s")
+        for idx, id_ in enumerate(ids, start=1):
+            print(f"[{idx}/{len(ids)}] Would process id={id_}")
+        return
 
-    # Try to load existing results to resume
-    existing = load_existing_results(args.output) if not args.dry_run else []
-    results = list(existing)
-    processed = set(gather_processed_ids(existing))
-
-    print(f"Resuming with {len(processed)} already-processed ids")
-
-    for idx, id_ in enumerate(ids, start=1):
-        if id_ in processed:
-            print(f"[{idx}/{len(ids)}] Skipping already processed id={id_}")
-            continue
-        print(f"[{idx}/{len(ids)}] Processing id={id_}")
-        if args.dry_run:
-            continue
-        try:
-            data = fetch_json_for_id(id_)
-        except Exception as e:
-            print(f"  Error fetching id={id_}: {e}", file=sys.stderr)
-            results.append({"match_id": id_, "error": str(e)})
-        else:
-            if isinstance(data, dict) and "match_id" not in data:
-                data.setdefault("match_id", id_)
-            results.append(data)
-        # Save progress after each item so we can resume if interrupted
-        try:
-            save_results(results, args.output)
-        except Exception as e:
-            print(f"  Failed to write progress to {args.output}: {e}", file=sys.stderr)
-        # mark as processed to avoid re-fetching in this run
-        processed.add(id_)
-        # Sleep, but don't sleep after last one
-        if idx < len(ids):
-            print(f"  Sleeping {args.delay}s...")
-            time.sleep(args.delay)
-
-    print(f"Saved {len(results)} items to {args.output}")
+    run_crawler(ids, args.output, args.delay)
 
 
 if __name__ == "__main__":

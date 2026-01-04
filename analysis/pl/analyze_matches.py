@@ -2,26 +2,29 @@ import json
 import csv
 from collections import defaultdict
 
-# 读取matches.json
-with open('matches.json', 'r', encoding='utf-8') as f:
-    matches_data = json.load(f)
-
-# 假设matches_data是列表，每个元素是{"result": {...}}
-matches = [m['result'] for m in matches_data]
-
-# 构建player到nickname的映射
-player_nicknames = {}
-player_stats = {}
-player_mapping = {
-    '76561199179588151': '76561198817729950'
-}
-
-
 def escape_nickname(nickname):
-    return f' {nickname.replace(',', '，')}'
+    if nickname[0] in ('=', ','):
+        return f'" {nickname.replace(",", "，")}"'
+    return nickname
 
 
-def main():
+def analyze(matches_data):
+    """
+    Analyzes match data and returns a list of player statistics.
+
+    :param matches_data: A list of match data dictionaries.
+    :return: A list of dictionaries, where each dictionary represents a player's stats.
+    """
+    # 假设matches_data是列表，每个元素是{"result": {...}}
+    matches = [m['result'] for m in matches_data if m and 'result' in m]
+
+    # 构建player到nickname的映射
+    player_nicknames = {}
+    player_stats = {}
+    player_mapping = {
+        '76561199179588151': '76561198817729950'
+    }
+
     for match in matches:
         if 'playersInfo' in match:
             for uid, info in match['playersInfo'].items():
@@ -41,6 +44,8 @@ def main():
             camp_win = (t_wins > ct_wins and camp == 'T') or (ct_wins > t_wins and camp == 'CT')
             for uid, stats in players.items():
                 uid = player_mapping.get(uid, uid)
+                if uid not in player_stats:
+                    continue
                 stats['is_win'] = camp_win
                 player_stats[uid].append(stats)
                 stats['is_mvp'] = 0  # 先标记为非MVP
@@ -50,11 +55,14 @@ def main():
                         mvp_uid = uid
 
         # 标记MVP
-        player_stats[mvp_uid][-1]['is_mvp'] = 1
+        if mvp_uid and mvp_uid in player_stats and player_stats[mvp_uid]:
+            player_stats[mvp_uid][-1]['is_mvp'] = 1
 
     # 计算player统计
     player_rows = []
     for uid, games in player_stats.items():
+        if not games:
+            continue
         nickname = player_nicknames.get(uid, 'Unknown')
         num_games = len(games)
         win_games = sum(1 for g in games if g['is_win'])
@@ -111,6 +119,18 @@ def main():
             '平均残局数': round(avg_1vn, 2),
             '平均AWP击杀数': round(avg_awp_kill_num, 2)
         })
+
+    # 按照分数、rating排序
+    player_rows.sort(key=lambda x: (x['积分'], x['平均Rating']), reverse=True)
+    return player_rows
+
+
+def main():
+    # 读取matches.json
+    with open('matches.json', 'r', encoding='utf-8') as f:
+        matches_data = json.load(f)
+
+    player_rows = analyze(matches_data)
 
     # 写入players.csv
     with open('players.csv', 'w', newline='', encoding='utf-8') as f:
