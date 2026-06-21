@@ -20,8 +20,6 @@ RUN pip config set global.index-url https://mirrors.pku.edu.cn/pypi/web/simple
 RUN pip install uv
 # Copy only dependency files first for build cache
 COPY pyproject.toml ./
-COPY uv.lock ./
-# Install Python dependencies with uv
 RUN uv pip install -r pyproject.toml --system
 # Copy backend code after dependencies are installed
 COPY backend/ ./backend
