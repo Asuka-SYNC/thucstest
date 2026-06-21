@@ -1,8 +1,8 @@
 # Stage 1: Build frontend
 FROM node:20 AS frontend-build
 WORKDIR /app
-# Set npm registry to PKU mirror
-RUN npm config set registry https://mirrors.pku.edu.cn/npm/
+# Set npm registry to npmmirror (Taobao) mirror
+RUN npm config set registry https://registry.npmmirror.com/
 COPY package.json vite.config.js index.html ./
 COPY src/ ./src
 COPY public/ ./public
