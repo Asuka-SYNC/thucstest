@@ -5,7 +5,7 @@ from .database import Base, engine, SessionLocal, get_db
 from .user import User, UserPermission, MatchingUser
 
 # Session models
-from .session import MatchSession, GameSession
+from .session import MatchSession, GameSession, ServerVote
 
 # Matchzy stats models
 from .matchzy import MatchzyStatsMatches, MatchzyStatsMaps, MatchzyStatsPlayers
@@ -26,6 +26,7 @@ __all__ = [
     # Session models
     'MatchSession',
     'GameSession',
+    'ServerVote',
     
     # Matchzy models
     'MatchzyStatsMatches',

@@ -11,7 +11,7 @@ from models import User, MatchingUser, get_db
 from auth import get_current_user
 from config import settings
 from utils.websocket import manager
-from utils.tasks import heartbeat_checker, match_checker, confirm_timeout_checker
+from utils.tasks import heartbeat_checker, match_checker, confirm_timeout_checker, vote_deadline_checker
 
 # 导入路由
 from routers import auth, matching, admin, game, events_callback, matchzy
@@ -54,6 +54,7 @@ async def startup_event():
     asyncio.create_task(heartbeat_checker())
     asyncio.create_task(match_checker())
     asyncio.create_task(confirm_timeout_checker())
+    asyncio.create_task(vote_deadline_checker())
 
 
 @app.get("/")

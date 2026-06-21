@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
@@ -178,12 +178,14 @@ async def confirm_match(
                 from models import GameSession
                 import uuid
 
-                # 创建游戏会话
+                # 创建游戏会话（进入投票阶段）
                 game_session_id = str(uuid.uuid4())
+                from config import settings
                 game_session = GameSession(
                     session_id=game_session_id,
                     player_ids=match_session.player_ids,
-                    status="preparing"
+                    status="voting",
+                    vote_deadline=datetime.utcnow() + timedelta(seconds=settings.SERVER_VOTE_TIMEOUT_SECONDS),
                 )
                 db.add(game_session)
 
