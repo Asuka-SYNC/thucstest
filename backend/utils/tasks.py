@@ -3,11 +3,12 @@ import uuid
 import random
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 
-from models import SessionLocal, MatchingUser, MatchSession, GameSession
+from models import SessionLocal, MatchingUser, MatchSession, GameSession, ServerVote
 from utils.websocket import manager
 from routers.matching import get_matching_users_list
+from config import settings
 
 
 async def heartbeat_checker():
@@ -145,5 +146,86 @@ async def confirm_timeout_checker():
                 matching_users = await get_matching_users_list(db)
                 await manager.broadcast_matching_update([user.dict() for user in matching_users])
 
+        finally:
+            db.close()
+
+
+async def _tally_votes(db: Session, session_id: str) -> str:
+    rows = db.query(
+        ServerVote.server_key,
+        func.count(ServerVote.id).label("count"),
+    ).filter(
+        ServerVote.game_session_id == session_id,
+    ).group_by(ServerVote.server_key).order_by(func.count(ServerVote.id).desc()).all()
+
+    if not rows:
+        return settings.SERVER_DEFAULT
+
+    top_count = rows[0].count
+    tied = [r for r in rows if r.count == top_count]
+    if len(tied) == 1:
+        return tied[0].server_key
+
+    for r in tied:
+        if r.server_key == settings.SERVER_DEFAULT:
+            return r.server_key
+    return tied[0].server_key
+
+
+async def vote_deadline_checker():
+    while True:
+        await asyncio.sleep(2)
+
+        db = SessionLocal()
+        try:
+            expired = db.query(GameSession).filter(
+                and_(
+                    GameSession.status == "voting",
+                    GameSession.vote_deadline <= datetime.utcnow(),
+                )
+            ).all()
+
+            for game_session in expired:
+                server_key = await _tally_votes(db, game_session.session_id)
+                game_session.selected_server = server_key
+                game_session.status = "provisioning"
+                db.commit()
+
+                try:
+                    from game.start_server import start_cs2_server
+
+                    info = await start_cs2_server(
+                        server_key=server_key,
+                        match_id=game_session.session_id,
+                    )
+                    game_session.server_ref = info.server_ref
+                    game_session.server_public_ip = info.public_ip
+                    game_session.server_connect_url = info.connect_url
+                    game_session.status = "ready"
+                    db.commit()
+
+                    for uid in game_session.player_ids:
+                        await manager.send_personal_message({
+                            "type": "server_ready",
+                            "data": {
+                                "game_session_id": game_session.session_id,
+                                "connect_url": info.connect_url,
+                                "public_ip": info.public_ip,
+                                "server_key": server_key,
+                            },
+                        }, uid)
+                except Exception as e:
+                    game_session.status = "provisioning_failed"
+                    game_session.game_data = {"error": str(e)}
+                    db.commit()
+
+                    for uid in game_session.player_ids:
+                        await manager.send_personal_message({
+                            "type": "server_error",
+                            "data": {
+                                "game_session_id": game_session.session_id,
+                                "error": str(e),
+                            },
+                        }, uid)
         finally:
             db.close()
