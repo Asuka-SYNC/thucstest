@@ -40,4 +40,10 @@ dependencies = [
     "pycparser>=2.22",
     "python-dotenv>=1.1.1",
     "python-openid>=2.2.5",
+    "docker>=7.0.0",
+    "paramiko>=3.4.0",
+    "tencentcloud-sdk-python-autoscaling>=3.0.0",
+    "tencentcloud-sdk-python-cvm>=3.0.0",
+    "alibabacloud_eci20180808>=3.0.0",
+    "alibabacloud_tea_openapi>=0.3.0",
 ]
