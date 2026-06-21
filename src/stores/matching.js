@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { apiClient } from '../api/client'
+import { WS_BASE_URL } from '../config'
 
 export const useMatchingStore = defineStore('matching', () => {
   const isInQueue = ref(false)
@@ -45,7 +46,7 @@ export const useMatchingStore = defineStore('matching', () => {
       websocket.value.close()
     }
 
-    const wsUrl = `ws://localhost:8000/ws/${userId}`
+    const wsUrl = `${WS_BASE_URL}/ws/${userId}`
     websocket.value = new WebSocket(wsUrl)
 
     websocket.value.onopen = () => {

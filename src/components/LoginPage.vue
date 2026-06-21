@@ -5,7 +5,7 @@
       <p>请使用您的Steam账号登录</p>
 
       <a
-          href="http://localhost:8000/auth/steam"
+          :href="steamAuthUrl"
           class="steam-login-btn"
       >
         <img
@@ -16,6 +16,10 @@
     </div>
   </div>
 </template>
+
+<script setup>
+import { STEAM_AUTH_URL as steamAuthUrl } from '../config'
+</script>
 
 <style scoped>
 .login-section {
